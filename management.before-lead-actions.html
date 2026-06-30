@@ -374,51 +374,6 @@ input,select{
   .app-top{display:block}
   .top-actions{margin-top:12px}
 }
-
-.action-row{
-  display:flex;
-  gap:8px;
-  flex-wrap:wrap;
-  margin-top:12px;
-}
-.action-btn{
-  border:1px solid rgba(255,255,255,.14);
-  background:rgba(255,255,255,.06);
-  color:white;
-  border-radius:999px;
-  padding:9px 10px;
-  font-size:10px;
-  text-transform:uppercase;
-  letter-spacing:.1em;
-  font-weight:1000;
-  cursor:pointer;
-}
-.action-btn.done{
-  border-color:rgba(116,242,168,.45);
-  background:rgba(116,242,168,.10);
-}
-.action-btn.archive{
-  border-color:rgba(255,214,110,.42);
-  background:rgba(255,214,110,.09);
-}
-.action-btn.delete{
-  border-color:rgba(255,107,138,.45);
-  background:rgba(255,107,138,.10);
-}
-.action-btn.restore{
-  border-color:rgba(85,233,255,.48);
-  background:rgba(85,233,255,.10);
-}
-.notes-box{
-  margin-top:10px;
-  border:1px solid rgba(255,255,255,.12);
-  background:rgba(0,0,0,.18);
-  border-radius:14px;
-  padding:10px;
-  color:#dbe7ff;
-  font-size:13px;
-}
-
 </style>
 </head>
 <body>
@@ -492,9 +447,6 @@ input,select{
         <button class="tab" data-filter="recruit">Recruiters</button>
         <button class="tab" data-filter="media">Media</button>
         <button class="tab" data-filter="sponsor">Sponsors</button>
-        <button class="tab" data-filter="done">Done</button>
-        <button class="tab" data-filter="archived">Archived</button>
-        <button class="tab" data-filter="deleted">Trash</button>
       </div>
       <div class="toolbar">
         <input id="search" placeholder="Search name, email, school, message...">
@@ -512,7 +464,6 @@ input,select{
     </section>
   </main>
 </section>
-
 
 <script>
 let token = localStorage.getItem('imr_parent_token') || '';
@@ -536,9 +487,6 @@ function safe(v){
 function typeOf(l){
   return String(l.leadType || l.lead_type || 'Website Lead');
 }
-function statusOf(l){
-  return String(l.status || 'New');
-}
 function fmtDate(v){
   const d = new Date(v);
   return isNaN(d) ? '' : d.toLocaleString([], {month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'});
@@ -551,30 +499,15 @@ function showApp(){
   loginScreen.classList.add('hidden');
   appScreen.classList.remove('hidden');
 }
-
-function matchesFilter(l){
-  const f = currentFilter.toLowerCase();
-  const type = typeOf(l).toLowerCase();
-  const status = statusOf(l).toLowerCase();
-
-  if(!f){
-    return status !== 'archived' && status !== 'deleted';
-  }
-
-  if(f === 'done') return status === 'done';
-  if(f === 'archived') return status === 'archived';
-  if(f === 'deleted') return status === 'deleted';
-
-  return type.includes(f) && status !== 'archived' && status !== 'deleted';
-}
-
 function filteredLeads(){
   let out = leads.slice();
   const q = searchEl.value.trim().toLowerCase();
+  const f = currentFilter.toLowerCase();
 
   out = out.filter(l => {
     const blob = Object.values(l).join(' ').toLowerCase();
-    return (!q || blob.includes(q)) && matchesFilter(l);
+    const type = typeOf(l).toLowerCase();
+    return (!q || blob.includes(q)) && (!f || type.includes(f));
   });
 
   if(sortEl.value === 'newest') out.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
@@ -583,44 +516,12 @@ function filteredLeads(){
 
   return out;
 }
-
 function setCounts(counts){
-  document.getElementById('totalCount').textContent = counts.total || 0;
+  document.getElementById('totalCount').textContent = counts.total || leads.length || 0;
   document.getElementById('fanCount').textContent = counts.fans || 0;
   document.getElementById('recruiterCount').textContent = counts.recruiters || 0;
   document.getElementById('mediaSponsorCount').textContent = (counts.media || 0) + (counts.sponsors || 0);
 }
-
-function actionButtons(l){
-  const status = statusOf(l).toLowerCase();
-
-  if(status === 'deleted'){
-    return `
-      <div class="action-row">
-        <button class="action-btn restore" data-action="restore" data-id="${safe(l.id)}">Restore</button>
-      </div>
-    `;
-  }
-
-  if(status === 'archived'){
-    return `
-      <div class="action-row">
-        <button class="action-btn restore" data-action="restore" data-id="${safe(l.id)}">Restore</button>
-        <button class="action-btn delete" data-action="delete" data-id="${safe(l.id)}">Move to Trash</button>
-      </div>
-    `;
-  }
-
-  return `
-    <div class="action-row">
-      <button class="action-btn done" data-action="done" data-id="${safe(l.id)}">Mark Done</button>
-      <button class="action-btn" data-action="progress" data-id="${safe(l.id)}">In Progress</button>
-      <button class="action-btn archive" data-action="archive" data-id="${safe(l.id)}">Archive</button>
-      <button class="action-btn delete" data-action="delete" data-id="${safe(l.id)}">Delete</button>
-    </div>
-  `;
-}
-
 function render(){
   const list = filteredLeads();
   leadList.innerHTML = '';
@@ -635,7 +536,7 @@ function render(){
       <div>
         <div class="meta">
           <span class="pill">${safe(typeOf(l))}</span>
-          <span class="pill">${safe(statusOf(l))}</span>
+          <span class="pill">${safe(l.status || 'New')}</span>
           <span class="pill">${fmtDate(l.createdAt)}</span>
         </div>
         <h3>${safe(l.name || 'Unnamed Lead')}</h3>
@@ -645,8 +546,6 @@ function render(){
           ${l.role ? `<span class="pill">${safe(l.role)}</span>` : ''}
           ${l.interest ? `<span class="pill">${safe(l.interest)}</span>` : ''}
         </div>
-        ${l.notes ? `<div class="notes-box"><b>Notes:</b> ${safe(l.notes)}</div>` : ''}
-        ${actionButtons(l)}
       </div>
       <div class="contact">
         ${email ? `<a href="mailto:${safe(email)}">Email: ${safe(email)}</a>` : '<span>No email provided</span>'}
@@ -655,12 +554,7 @@ function render(){
     `;
     leadList.appendChild(card);
   });
-
-  leadList.querySelectorAll('[data-action]').forEach(btn => {
-    btn.addEventListener('click', () => handleAction(btn.dataset.action, btn.dataset.id));
-  });
 }
-
 async function loadLeads(){
   statusEl.textContent = 'Loading leads...';
 
@@ -672,7 +566,7 @@ async function loadLeads(){
 
     leads = data.leads || [];
     setCounts(data.counts || {});
-    statusEl.textContent = 'Showing ' + filteredLeads().length + ' visible submissions. Total stored: ' + leads.length + '.';
+    statusEl.textContent = 'Showing ' + leads.length + ' total submissions.';
     render();
     showApp();
   }catch(error){
@@ -683,56 +577,14 @@ async function loadLeads(){
     loginError.classList.remove('hidden');
   }
 }
-
-async function updateLead(id, status){
-  const response = await fetch('/api/leads?token=' + encodeURIComponent(token), {
-    method: 'PATCH',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ id, status, token })
-  });
-
-  const data = await response.json();
-  if(!data.ok) throw new Error(data.error || 'Could not update lead.');
-
-  await loadLeads();
-}
-
-async function handleAction(action, id){
-  try{
-    if(action === 'done') await updateLead(id, 'Done');
-    if(action === 'progress') await updateLead(id, 'In Progress');
-    if(action === 'archive') await updateLead(id, 'Archived');
-    if(action === 'restore') await updateLead(id, 'New');
-
-    if(action === 'delete'){
-      const sure = confirm('Move this lead to Trash? You can restore it from the Trash tab.');
-      if(!sure) return;
-
-      const response = await fetch('/api/leads?token=' + encodeURIComponent(token) + '&id=' + encodeURIComponent(id), {
-        method: 'DELETE'
-      });
-
-      const data = await response.json();
-      if(!data.ok) throw new Error(data.error || 'Could not delete lead.');
-
-      await loadLeads();
-    }
-  }catch(error){
-    alert('Action failed: ' + error.message);
-  }
-}
-
 function csvEscape(v){
   const s = String(v ?? '');
-  return /[",
-]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
 }
-
 function exportCsv(){
   const list = filteredLeads();
-  const headers = ['createdAt','updatedAt','leadType','status','name','email','phone','organization','role','interest','message','sourcePage','notes'];
-  const csv = [headers.join(',')].concat(list.map(l => headers.map(h => csvEscape(l[h])).join(','))).join('
-');
+  const headers = ['createdAt','leadType','name','email','phone','organization','role','interest','message','sourcePage','status'];
+  const csv = [headers.join(',')].concat(list.map(l => headers.map(h => csvEscape(l[h])).join(','))).join('\n');
   const blob = new Blob([csv], {type:'text/csv'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -755,13 +607,9 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
   loginToken.value = '';
   showLogin();
 });
-
 document.getElementById('refreshBtn').addEventListener('click', loadLeads);
 document.getElementById('exportBtn').addEventListener('click', exportCsv);
-searchEl.addEventListener('input', () => {
-  statusEl.textContent = 'Showing ' + filteredLeads().length + ' visible submissions. Total stored: ' + leads.length + '.';
-  render();
-});
+searchEl.addEventListener('input', render);
 sortEl.addEventListener('change', render);
 
 document.querySelectorAll('.tab').forEach(btn => {
@@ -769,13 +617,11 @@ document.querySelectorAll('.tab').forEach(btn => {
     document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentFilter = btn.dataset.filter || '';
-    statusEl.textContent = 'Showing ' + filteredLeads().length + ' visible submissions. Total stored: ' + leads.length + '.';
     render();
   });
 });
 
 if(token){ loadLeads(); } else { showLogin(); }
 </script>
-
 </body>
 </html>

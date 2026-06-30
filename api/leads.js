@@ -17,10 +17,16 @@ function clean(value) {
   return String(value || '').trim();
 }
 
+function isAuthorized(req) {
+  const token = clean(req.query?.token || req.headers['x-admin-token'] || req.body?.token);
+  return ADMIN_TOKEN && token === ADMIN_TOKEN;
+}
+
 function buildLead(body = {}, req) {
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     leadType: clean(body.leadType || body.type || 'Website Lead'),
     name: clean(body.name || body.fullName || body.full_name),
     email: clean(body.email),
@@ -64,54 +70,80 @@ async function sendAlert(lead) {
     })
   });
 
-  if (!response.ok) {
-    return { ok: false, error: await response.text() };
-  }
-
+  if (!response.ok) return { ok: false, error: await response.text() };
   return { ok: true };
 }
 
-async function readAllLeads() {
+async function readLeadFromBlob(blob) {
+  try {
+    const token = process.env.BLOB_READ_WRITE_TOKEN || '';
+    const url = blob.downloadUrl || blob.url;
+    if (!url) return null;
+
+    const response = await fetch(url + `?t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+
+    if (!response.ok) return null;
+
+    const lead = await response.json();
+    lead._pathname = blob.pathname;
+    lead._url = blob.url;
+    return lead;
+  } catch {
+    return null;
+  }
+}
+
+async function readAllLeadsWithPath() {
   const found = await list({ prefix: LEADS_PREFIX, limit: 1000 });
   const blobs = found.blobs || [];
 
-  const token = process.env.BLOB_READ_WRITE_TOKEN || '';
-
-  const leads = await Promise.all(
-    blobs.map(async (blob) => {
-      try {
-        const url = blob.downloadUrl || blob.url;
-        if (!url) return null;
-
-        const response = await fetch(url + `?t=${Date.now()}`, {
-          cache: 'no-store',
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
-        });
-
-        if (!response.ok) {
-          return null;
-        }
-
-        return await response.json();
-      } catch (error) {
-        return null;
-      }
-    })
-  );
+  const leads = await Promise.all(blobs.map(readLeadFromBlob));
 
   return leads
     .filter(Boolean)
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
+async function findLeadById(id) {
+  const leads = await readAllLeadsWithPath();
+  return leads.find(lead => lead.id === id) || null;
+}
+
+async function saveExistingLead(lead) {
+  if (!lead || !lead._pathname) throw new Error('Lead pathname missing.');
+
+  const pathname = lead._pathname;
+  const cleanLead = { ...lead };
+
+  delete cleanLead._pathname;
+  delete cleanLead._url;
+
+  await put(pathname, JSON.stringify(cleanLead, null, 2), {
+    access: 'private',
+    contentType: 'application/json',
+    addRandomSuffix: false
+  });
+
+  return cleanLead;
+}
+
 function buildCounts(leads) {
+  const active = leads.filter(x => !/archived|deleted/i.test(x.status || ''));
+
   return {
-    total: leads.length,
-    fans: leads.filter(x => /55|fan|supporter/i.test(x.leadType || '')).length,
-    recruiters: leads.filter(x => /recruit|coach/i.test(x.leadType || '')).length,
-    media: leads.filter(x => /media/i.test(x.leadType || '')).length,
-    sponsors: leads.filter(x => /sponsor|partner/i.test(x.leadType || '')).length,
-    new: leads.filter(x => String(x.status || '').toLowerCase() === 'new').length
+    total: active.length,
+    all: leads.length,
+    fans: active.filter(x => /55|fan|supporter/i.test(x.leadType || '')).length,
+    recruiters: active.filter(x => /recruit|coach/i.test(x.leadType || '')).length,
+    media: active.filter(x => /media/i.test(x.leadType || '')).length,
+    sponsors: active.filter(x => /sponsor|partner/i.test(x.leadType || '')).length,
+    new: active.filter(x => String(x.status || '').toLowerCase() === 'new').length,
+    done: leads.filter(x => String(x.status || '').toLowerCase() === 'done').length,
+    archived: leads.filter(x => String(x.status || '').toLowerCase() === 'archived').length,
+    deleted: leads.filter(x => String(x.status || '').toLowerCase() === 'deleted').length
   };
 }
 
@@ -141,18 +173,78 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET') {
-      const token = clean(req.query.token || req.headers['x-admin-token']);
-
-      if (!ADMIN_TOKEN || token !== ADMIN_TOKEN) {
+      if (!isAuthorized(req)) {
         return sendJson(res, 401, { ok: false, error: 'Unauthorized.' });
       }
 
-      const leads = await readAllLeads();
+      const leads = await readAllLeadsWithPath();
+      const publicLeads = leads.map(lead => {
+        const copy = { ...lead };
+        delete copy._pathname;
+        delete copy._url;
+        return copy;
+      });
 
       return sendJson(res, 200, {
         ok: true,
-        leads,
-        counts: buildCounts(leads)
+        leads: publicLeads,
+        counts: buildCounts(publicLeads)
+      });
+    }
+
+    if (req.method === 'PATCH') {
+      if (!isAuthorized(req)) {
+        return sendJson(res, 401, { ok: false, error: 'Unauthorized.' });
+      }
+
+      const id = clean(req.body?.id);
+      const status = clean(req.body?.status);
+      const notes = typeof req.body?.notes === 'string' ? req.body.notes : undefined;
+
+      const allowedStatuses = ['New', 'In Progress', 'Done', 'Archived', 'Deleted'];
+
+      if (!id) return sendJson(res, 400, { ok: false, error: 'Missing lead id.' });
+      if (status && !allowedStatuses.includes(status)) {
+        return sendJson(res, 400, { ok: false, error: 'Invalid status.' });
+      }
+
+      const lead = await findLeadById(id);
+      if (!lead) return sendJson(res, 404, { ok: false, error: 'Lead not found.' });
+
+      if (status) lead.status = status;
+      if (notes !== undefined) lead.notes = notes;
+
+      lead.updatedAt = new Date().toISOString();
+
+      const saved = await saveExistingLead(lead);
+
+      return sendJson(res, 200, {
+        ok: true,
+        message: 'Lead updated.',
+        lead: saved
+      });
+    }
+
+    if (req.method === 'DELETE') {
+      if (!isAuthorized(req)) {
+        return sendJson(res, 401, { ok: false, error: 'Unauthorized.' });
+      }
+
+      const id = clean(req.query?.id || req.body?.id);
+      if (!id) return sendJson(res, 400, { ok: false, error: 'Missing lead id.' });
+
+      const lead = await findLeadById(id);
+      if (!lead) return sendJson(res, 404, { ok: false, error: 'Lead not found.' });
+
+      lead.status = 'Deleted';
+      lead.updatedAt = new Date().toISOString();
+
+      const saved = await saveExistingLead(lead);
+
+      return sendJson(res, 200, {
+        ok: true,
+        message: 'Lead moved to trash.',
+        lead: saved
       });
     }
 
