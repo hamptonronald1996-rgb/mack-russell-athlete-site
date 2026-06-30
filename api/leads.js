@@ -6,39 +6,30 @@ const ALERT_EMAIL = process.env.ALERT_EMAIL || '';
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const FROM_EMAIL = process.env.FROM_EMAIL || 'Isaiah Mack-Russell Site <onboarding@resend.dev>';
 
-function json(res, status, payload) {
-  res.status(status).setHeader('Content-Type', 'application/json');
+function sendJson(res, status, payload) {
+  res.status(status);
+  res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-store');
   res.end(JSON.stringify(payload));
 }
 
-function normalize(value) {
+function clean(value) {
   return String(value || '').trim();
 }
 
-function cleanLead(body = {}, req) {
-  const leadType = normalize(body.leadType || body.type || 'Website Lead');
-  const name = normalize(body.name || body.fullName || body.full_name);
-  const email = normalize(body.email);
-  const phone = normalize(body.phone);
-  const organization = normalize(body.organization || body.school || body.company || body.team);
-  const role = normalize(body.role || body.fanType || body.recruiterRole);
-  const interest = normalize(body.interest || body.interestLevel);
-  const message = normalize(body.message || body.notes);
-  const sourcePage = normalize(body.sourcePage || body.page || body.url || req.headers.referer);
-
+function buildLead(body = {}, req) {
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     createdAt: new Date().toISOString(),
-    leadType,
-    name,
-    email,
-    phone,
-    organization,
-    role,
-    interest,
-    message,
-    sourcePage,
+    leadType: clean(body.leadType || body.type || 'Website Lead'),
+    name: clean(body.name || body.fullName || body.full_name),
+    email: clean(body.email),
+    phone: clean(body.phone),
+    organization: clean(body.organization || body.school || body.company || body.team),
+    role: clean(body.role || body.fanType || body.recruiterRole),
+    interest: clean(body.interest || body.interestLevel),
+    message: clean(body.message || body.notes),
+    sourcePage: clean(body.sourcePage || body.page || body.url || req.headers.referer),
     status: 'New',
     notes: ''
   };
@@ -46,22 +37,6 @@ function cleanLead(body = {}, req) {
 
 async function sendAlert(lead) {
   if (!RESEND_API_KEY || !ALERT_EMAIL) return { skipped: true };
-
-  const subject = `[Isaiah Mack-Russell Site] New ${lead.leadType}`;
-  const html = `
-    <div style="font-family:Arial,sans-serif;line-height:1.5">
-      <h2>New ${lead.leadType}</h2>
-      <p><strong>Name:</strong> ${lead.name || ''}</p>
-      <p><strong>Email:</strong> ${lead.email || ''}</p>
-      <p><strong>Phone:</strong> ${lead.phone || ''}</p>
-      <p><strong>Organization:</strong> ${lead.organization || ''}</p>
-      <p><strong>Role:</strong> ${lead.role || ''}</p>
-      <p><strong>Interest:</strong> ${lead.interest || ''}</p>
-      <p><strong>Message:</strong><br>${(lead.message || '').replace(/\n/g, '<br>')}</p>
-      <p><strong>Source:</strong> ${lead.sourcePage || ''}</p>
-      <p>Open the management dashboard on the website to review all leads.</p>
-    </div>
-  `;
 
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -72,14 +47,25 @@ async function sendAlert(lead) {
     body: JSON.stringify({
       from: FROM_EMAIL,
       to: [ALERT_EMAIL],
-      subject,
-      html
+      subject: `[Isaiah Mack-Russell Site] New ${lead.leadType}`,
+      html: `
+        <div style="font-family:Arial,sans-serif;line-height:1.5">
+          <h2>New ${lead.leadType}</h2>
+          <p><strong>Name:</strong> ${lead.name}</p>
+          <p><strong>Email:</strong> ${lead.email}</p>
+          <p><strong>Phone:</strong> ${lead.phone}</p>
+          <p><strong>Organization:</strong> ${lead.organization}</p>
+          <p><strong>Role:</strong> ${lead.role}</p>
+          <p><strong>Interest:</strong> ${lead.interest}</p>
+          <p><strong>Message:</strong><br>${String(lead.message || '').replace(/\n/g, '<br>')}</p>
+          <p><strong>Source:</strong> ${lead.sourcePage}</p>
+        </div>
+      `
     })
   });
 
   if (!response.ok) {
-    const text = await response.text();
-    return { ok: false, error: text };
+    return { ok: false, error: await response.text() };
   }
 
   return { ok: true };
@@ -92,24 +78,27 @@ async function readAllLeads() {
   const leads = await Promise.all(
     blobs.map(async (blob) => {
       try {
-        const res = await fetch(blob.url + `?v=${Date.now()}`, { cache: 'no-store' });
-        return await res.json();
-      } catch (err) {
+        const response = await fetch(blob.url + `?t=${Date.now()}`, { cache: 'no-store' });
+        if (!response.ok) return null;
+        return await response.json();
+      } catch {
         return null;
       }
     })
   );
 
-  return leads.filter(Boolean).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  return leads
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
-function counts(leads) {
+function buildCounts(leads) {
   return {
     total: leads.length,
-    fans: leads.filter(x => /55|fan/i.test(x.leadType || '')).length,
-    recruiters: leads.filter(x => /recruit/i.test(x.leadType || '')).length,
+    fans: leads.filter(x => /55|fan|supporter/i.test(x.leadType || '')).length,
+    recruiters: leads.filter(x => /recruit|coach/i.test(x.leadType || '')).length,
     media: leads.filter(x => /media/i.test(x.leadType || '')).length,
-    sponsors: leads.filter(x => /sponsor/i.test(x.leadType || '')).length,
+    sponsors: leads.filter(x => /sponsor|partner/i.test(x.leadType || '')).length,
     new: leads.filter(x => String(x.status || '').toLowerCase() === 'new').length
   };
 }
@@ -117,34 +106,49 @@ function counts(leads) {
 export default async function handler(req, res) {
   try {
     if (req.method === 'POST') {
-      const lead = cleanLead(req.body || {}, req);
+      const lead = buildLead(req.body || {}, req);
 
       if (!lead.name && !lead.email && !lead.phone) {
-        return json(res, 400, { ok: false, error: 'Missing contact info.' });
+        return sendJson(res, 400, { ok: false, error: 'Missing contact information.' });
       }
 
       await put(`${LEADS_PREFIX}${lead.createdAt}-${lead.id}.json`, JSON.stringify(lead, null, 2), {
-        access: 'private',
+        access: 'public',
         contentType: 'application/json',
         addRandomSuffix: false
       });
 
       const email = await sendAlert(lead);
-      return json(res, 200, { ok: true, lead, email });
+
+      return sendJson(res, 200, {
+        ok: true,
+        message: 'Lead saved.',
+        lead,
+        email
+      });
     }
 
     if (req.method === 'GET') {
-      const token = normalize(req.query.token || req.headers['x-admin-token']);
+      const token = clean(req.query.token || req.headers['x-admin-token']);
+
       if (!ADMIN_TOKEN || token !== ADMIN_TOKEN) {
-        return json(res, 401, { ok: false, error: 'Unauthorized.' });
+        return sendJson(res, 401, { ok: false, error: 'Unauthorized.' });
       }
 
       const leads = await readAllLeads();
-      return json(res, 200, { ok: true, leads, counts: counts(leads) });
+
+      return sendJson(res, 200, {
+        ok: true,
+        leads,
+        counts: buildCounts(leads)
+      });
     }
 
-    return json(res, 405, { ok: false, error: 'Method not allowed.' });
-  } catch (err) {
-    return json(res, 500, { ok: false, error: String(err.message || err) });
+    return sendJson(res, 405, { ok: false, error: 'Method not allowed.' });
+  } catch (error) {
+    return sendJson(res, 500, {
+      ok: false,
+      error: String(error.message || error)
+    });
   }
 }
