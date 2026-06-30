@@ -75,25 +75,13 @@ async function readAllLeads() {
   const found = await list({ prefix: LEADS_PREFIX, limit: 1000 });
   const blobs = found.blobs || [];
 
-  const token = process.env.BLOB_READ_WRITE_TOKEN || '';
-
   const leads = await Promise.all(
     blobs.map(async (blob) => {
       try {
-        const url = blob.downloadUrl || blob.url;
-        if (!url) return null;
-
-        const response = await fetch(url + `?t=${Date.now()}`, {
-          cache: 'no-store',
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
-        });
-
-        if (!response.ok) {
-          return null;
-        }
-
+        const response = await fetch((blob.downloadUrl || blob.url) + `?t=${Date.now()}`, { cache: 'no-store' });
+        if (!response.ok) return null;
         return await response.json();
-      } catch (error) {
+      } catch {
         return null;
       }
     })
