@@ -78,7 +78,7 @@ async function readAllLeads() {
   const leads = await Promise.all(
     blobs.map(async (blob) => {
       try {
-        const response = await fetch((blob.downloadUrl || blob.url) + `?t=${Date.now()}`, { cache: 'no-store' });
+        const response = await fetch(blob.url + `?t=${Date.now()}`, { cache: 'no-store' });
         if (!response.ok) return null;
         return await response.json();
       } catch {
@@ -113,7 +113,7 @@ export default async function handler(req, res) {
       }
 
       await put(`${LEADS_PREFIX}${lead.createdAt}-${lead.id}.json`, JSON.stringify(lead, null, 2), {
-        access: 'private',
+        access: 'public',
         contentType: 'application/json',
         addRandomSuffix: false
       });
