@@ -1,0 +1,5 @@
+# Exclude former-client media from any ZIP/package created with git archive.
+assets/img export-ignore
+assets/media export-ignore
+index.before-* export-ignore
+*.sh export-ignore

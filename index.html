@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="description" content="A premium athlete recruiting profile with film, verified stats, achievements, and direct contact.">
+  <meta name="robots" content="index,follow">
+  <title>Athlete Spotlight | Recruiting Profile</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/site-config.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="Athlete profile home"><span data-field="number">00</span><strong data-field="shortName">Athlete Spotlight</strong></a>
+    <nav aria-label="Main navigation">
+      <a href="#profile">Profile</a><a href="#film">Film</a><a href="#achievements">Achievements</a><a href="#contact">Contact</a>
+    </nav>
+    <a class="button small" href="/management.html">Family Login</a>
+  </header>
+  <main id="top">
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow"><span data-field="classYear">20XX</span> Recruiting Profile</p>
+        <h1><span data-field="firstName">Jordan</span><br><em data-field="lastName">Carter</em></h1>
+        <p class="lede"><span data-field="position">Position</span> · <span data-field="school">High School</span> · <span data-field="city">City, State</span></p>
+        <div class="actions"><a class="button" data-link="primaryFilm" href="#film">Watch Film</a><a class="button ghost" href="#contact">Recruiting Contact</a></div>
+      </div>
+      <div class="portrait" data-image="heroImage" role="img" aria-label="Athlete hero photo">
+        <div class="photo-placeholder"><span>PHOTO</span><small>Replace in site-config.js</small></div>
+        <div class="jersey"><span data-field="number">00</span><small data-field="position">Position</small></div>
+      </div>
+    </section>
+    <section class="stat-strip" aria-label="Athlete measurements">
+      <div><strong data-field="height">6'0&quot;</strong><span>Height</span></div>
+      <div><strong data-field="weight">180 lbs</strong><span>Weight</span></div>
+      <div><strong data-field="gpa">3.5</strong><span>GPA</span></div>
+      <div><strong data-field="classYear">20XX</strong><span>Class</span></div>
+    </section>
+    <section id="profile" class="section split">
+      <div><p class="eyebrow">Athlete profile</p><h2>Built for the next level.</h2></div>
+      <div><p class="body-copy" data-field="bio">Use this space for a concise athlete biography covering playing style, character, academics, leadership, and recruiting goals.</p><div class="chips"><span data-field="position">Position</span><span data-field="school">High School</span><span data-field="conference">Conference</span></div></div>
+    </section>
+    <section id="film" class="section">
+      <div class="section-title"><div><p class="eyebrow">Game film</p><h2>See the work.</h2></div><a class="text-link" data-link="primaryFilm" href="#">Full profile ↗</a></div>
+      <div class="film-grid" id="filmGrid"></div>
+    </section>
+    <section id="achievements" class="section">
+      <div class="section-title"><div><p class="eyebrow">Track record</p><h2>Achievements.</h2></div></div>
+      <div class="achievement-grid" id="achievementGrid"></div>
+    </section>
+    <section id="contact" class="section contact-section">
+      <div><p class="eyebrow">Recruiting & opportunities</p><h2>Start a conversation.</h2><p class="body-copy">Coaches, recruiters, media, and sponsors can send an inquiry directly to the athlete's management team.</p></div>
+      <form id="leadForm" class="contact-form">
+        <input type="hidden" name="leadType" value="Recruiting Inquiry">
+        <label>Name<input name="name" autocomplete="name" required></label>
+        <label>Email<input name="email" type="email" autocomplete="email" required></label>
+        <label>Organization<input name="organization" autocomplete="organization"></label>
+        <label>Role<select name="role"><option>College Coach</option><option>Recruiter</option><option>Media</option><option>Sponsor</option><option>Other</option></select></label>
+        <label class="wide">Message<textarea name="message" required></textarea></label>
+        <button class="button wide" type="submit">Send Inquiry</button>
+        <p id="formStatus" class="form-status wide" role="status"></p>
+      </form>
+    </section>
+  </main>
+  <footer><strong data-field="fullName">Jordan Carter</strong><span>Official athlete recruiting profile</span><small>Template by Build with Ronald</small></footer>
+</body>
+</html>

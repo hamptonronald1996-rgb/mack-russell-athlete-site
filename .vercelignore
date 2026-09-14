@@ -1,0 +1,5 @@
+# Former-client media is retained only in repository history and is not part of the resale deployment.
+assets/img/
+assets/media/
+index.before-*
+*.sh
